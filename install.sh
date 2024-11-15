@@ -5,16 +5,56 @@ print_step() {
   echo -e "\n========== $1 ==========" | tee -a install.log
 }
 
+# Function to display usage
+print_usage() {
+  echo -e "Usage: $0 [OPTIONS]"
+  echo -e "\nOptions:"
+  echo -e "  --proxy <proxy_url>    Set a proxy URL for all network requests"
+  echo -e "  --help                 Display this help message"
+  exit 0
+}
+
+# Parse arguments
+USE_PROXY=false
+PROXY_ADDRESS=""
+while [[ "$#" -gt 0 ]]; do
+  case $1 in
+    --proxy)
+      USE_PROXY=true
+      PROXY_ADDRESS="$2"
+      shift 2
+      ;;
+    --help)
+      print_usage
+      ;;
+    *)
+      echo "Unknown option: $1" | tee -a install.log
+      exit 1
+      ;;
+  esac
+done
+
+# Set proxy settings if --proxy option is provided
+if [ "$USE_PROXY" = true ]; then
+  export http_proxy="$PROXY_ADDRESS"
+  export https_proxy="$PROXY_ADDRESS"
+  export ftp_proxy="$PROXY_ADDRESS"
+  export no_proxy="localhost,127.0.0.1,::1"
+  print_step "Proxy settings applied: $PROXY_ADDRESS"
+else
+  print_step "No proxy settings provided"
+fi
+
 # Redirect all output to install.log for silent execution and logging
 exec > >(tee -a install.log) 2>&1
 
-# Update and upgrade system
+# Update and upgrade system using apt-get to avoid CLI warnings
 print_step "Updating and upgrading system"
-sudo apt update -qq && sudo apt upgrade -y -qq
+sudo apt-get update -qq && sudo apt-get upgrade -y -qq
 
-# Install required packages
+# Install required packages using apt-get to avoid CLI warnings
 print_step "Installing required packages"
-sudo apt install -y -qq zsh git stow kubectx fzf bat vim neovim
+sudo apt-get install -y -qq zsh git stow kubectx fzf bat vim
 
 # Set up configuration directory
 print_step "Setting up configuration directory"
@@ -42,18 +82,22 @@ sudo dpkg -i fastfetch-linux-amd64.deb && rm fastfetch-linux-amd64.deb
 # Clone dotfiles repository and apply configuration using stow
 print_step "Cloning dotfiles repository and applying configuration"
 DOTFILES_DIR=${HOME}/.dotfiles
+
+# Clone or update dotfiles repository
 if [ ! -d "$DOTFILES_DIR" ]; then
+  print_step "Cloning dotfiles repository"
   git clone https://github.com/icedmac/dotfiles.git $DOTFILES_DIR
+else
+  print_step "Dotfiles directory exists"
 fi
+
+# Apply dotfiles configuration using stow
 cd $DOTFILES_DIR
+print_step "Applying dotfiles configuration"
 rm ${HOME}/.zshrc
 stow zsh ohmyzsh
-cd
 
 # exec zsh to apply changes
 print_step "Applying changes and starting zsh"
-zsh
-
-# Installation complete
-print_step "Installation complete"
-
+cd ${HOME}
+/usr/bin/zsh
